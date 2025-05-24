@@ -1381,10 +1381,14 @@ and the [ntfy Android app](https://github.com/binwiederhier/ntfy-android/release
 * Write VAPID keys to file in `ntfy webpush --output-file` ([#1138](https://github.com/binwiederhier/ntfy/pull/1138), thanks to [@nogweii](https://github.com/nogweii))
 * Add Docker major/minor version to image tags ([#1271](https://github.com/binwiederhier/ntfy/pull/1271), thanks to [@RoboMagus](https://github.com/RoboMagus))
 * Add `latest` subscription param for grabbing just the most recent message ([#1216](https://github.com/binwiederhier/ntfy/pull/1216), thanks to [@wunter8](https://github.com/wunter8))
+* Allow using `NTFY_PASSWORD_HASH` in `ntfy user` command instead of raw password ([#1340](https://github.com/binwiederhier/ntfy/pull/1340), thanks to [@wunter8](https://github.com/wunter8) for implementing)
+* You can now change passwords via `v1/users` API ([#1267](https://github.com/binwiederhier/ntfy/pull/1267), thanks to [@wunter8](https://github.com/wunter8) for implementing)
+* Make WebPush subscription warning/expiry configurable, increase default to 55/60 days ([#1212](https://github.com/binwiederhier/ntfy/pull/1212), thanks to [@KuroSetsuna29](https://github.com/KuroSetsuna29))
 
 **Bug fixes + maintenance:**
 
 * Security updates for dependencies and Docker images ([#1341](https://github.com/binwiederhier/ntfy/pull/1341))
+* Upgrade to Vite 6 ([#1342](https://github.com/binwiederhier/ntfy/pull/1342), thanks Dependabot)
 * Fix iOS delivery issues for read-protected topics ([#1207](https://github.com/binwiederhier/ntfy/pull/1287), thanks a lot to [@barart](https://github.com/barart)!)
 * Add `Date` header to outgoing emails to avoid rejection ([#1141](https://github.com/binwiederhier/ntfy/pull/1141), thanks to [@pcouy](https://github.com/pcouy))
 * Fix IP address parsing when behind a proxy ([#1266](https://github.com/binwiederhier/ntfy/pull/1266), thanks to [@mmatuska](https://github.com/mmatuska))
@@ -1392,6 +1396,7 @@ and the [ntfy Android app](https://github.com/binwiederhier/ntfy-android/release
 * Add OCI image version to Docker image ([#1307](https://github.com/binwiederhier/ntfy/pull/1307), thanks to [@jlssmt](https://github.com/jlssmt))
 * WebSocket returning incorrect HTTP error code ([#1338](https://github.com/binwiederhier/ntfy/pull/1338) / [#1337](https://github.com/binwiederhier/ntfy/pull/1337), thanks to [@wunter8](https://github.com/wunter8) for debugging and implementing)
 * Make Markdown in the web app scrollable horizontally ([#1262](https://github.com/binwiederhier/ntfy/pull/1262), thanks to [@rake5k](https://github.com/rake5k) for fixing)
+* Make sure WebPush subscription topics are actually deleted (no ticket)
 
 **Documentation:**
 
