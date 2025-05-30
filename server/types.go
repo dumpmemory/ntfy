@@ -105,6 +105,8 @@ type publishMessage struct {
 	Filename string   `json:"filename"`
 	Email    string   `json:"email"`
 	Call     string   `json:"call"`
+	Cache    string   `json:"cache"`    // use string as it defaults to true (or use &bool instead)
+	Firebase string   `json:"firebase"` // use string as it defaults to true (or use &bool instead)
 	Delay    string   `json:"delay"`
 }
 
@@ -253,9 +255,10 @@ type apiStatsResponse struct {
 	MessagesRate float64 `json:"messages_rate"` // Average number of messages per second
 }
 
-type apiUserAddRequest struct {
+type apiUserAddOrUpdateRequest struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
+	Hash     string `json:"hash"`
 	Tier     string `json:"tier"`
 	// Do not add 'role' here. We don't want to add admins via the API.
 }
