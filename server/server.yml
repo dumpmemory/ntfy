@@ -95,13 +95,23 @@
 # auth-default-access: "read-write"
 # auth-startup-queries:
 
-# If set, the X-Forwarded-For header is used to determine the visitor IP address
-# instead of the remote address of the connection.
+# If set, the X-Forwarded-For header (or whatever is configured in proxy-forwarded-header) is used to determine
+# the visitor IP address instead of the remote address of the connection.
 #
-# WARNING: If you are behind a proxy, you must set this, otherwise all visitors are rate limited
+# WARNING: If you are behind a proxy, you must set this, otherwise all visitors are rate-limited
 #          as if they are one.
 #
+# - behind-proxy makes it so that the real visitor IP address is extracted from the header defined in
+#   proxy-forwarded-header. Without this, the remote address of the incoming connection is used.
+# - proxy-forwarded-header is the header to use to identify visitors. It may be a single IP address (e.g. 1.2.3.4),
+#   a comma-separated list of IP addresses (e.g. "1.2.3.4, 5.6.7.8"), or an RFC 7239-style header (e.g. "for=1.2.3.4;by=proxy.example.com, for=5.6.7.8").
+# - proxy-trusted-addresses is a comma-separated list of IP addresses that are removed from the forwarded header
+#   to determine the real IP address. This is only useful if there are multiple proxies involved that add themselves to
+#   the forwarded header.
+#
 # behind-proxy: false
+# proxy-forwarded-header: "X-Forwarded-For"
+# proxy-trusted-addresses:
 
 # If enabled, clients can attach files to notifications as attachments. Minimum settings to enable attachments
 # are "attachment-cache-dir" and "base-url".
@@ -138,7 +148,7 @@
 # - smtp-server-domain is the e-mail domain, e.g. ntfy.sh
 # - smtp-server-addr-prefix is an optional prefix for the e-mail addresses to prevent spam. If set to "ntfy-",
 #   for instance, only e-mails to ntfy-$topic@ntfy.sh will be accepted. If this is not set, all emails to
-#   $topic@ntfy.sh will be accepted (which may obviously be a spam problem).
+#   $topic@ntfy.sh will be accepted (which may be a spam problem).
 #
 # smtp-server-listen:
 # smtp-server-domain:
@@ -146,7 +156,7 @@
 
 # Web Push support (background notifications for browsers)
 #
-# If enabled, allows ntfy to receive push notifications, even when the ntfy web app is closed. When enabled, users
+# If enabled, allows the ntfy web app to receive push notifications, even when the web app is closed. When enabled, users
 # can enable background notifications in the web app. Once enabled, ntfy will forward published messages to the push
 # endpoint, which will then forward it to the browser.
 #
@@ -155,15 +165,19 @@
 #
 # - web-push-public-key is the generated VAPID public key, e.g. AA1234BBCCddvveekaabcdfqwertyuiopasdfghjklzxcvbnm1234567890
 # - web-push-private-key is the generated VAPID private key, e.g. AA2BB1234567890abcdefzxcvbnm1234567890
-# - web-push-file is a database file to keep track of browser subscription endpoints, e.g. `/var/cache/ntfy/webpush.db`
-# - web-push-email-address is the admin email address send to the push provider, e.g. `sysadmin@example.com`
+# - web-push-file is a database file to keep track of browser subscription endpoints, e.g. /var/cache/ntfy/webpush.db
+# - web-push-email-address is the admin email address send to the push provider, e.g. sysadmin@example.com
 # - web-push-startup-queries is an optional list of queries to run on startup`
+# - web-push-expiry-warning-duration defines the duration after which unused subscriptions are sent a warning (default is 55d`)
+# - web-push-expiry-duration defines the duration after which unused subscriptions will expire (default is 60d)
 #
 # web-push-public-key:
 # web-push-private-key:
 # web-push-file:
 # web-push-email-address:
 # web-push-startup-queries:
+# web-push-expiry-warning-duration: "55d"
+# web-push-expiry-duration: "60d"
 
 # If enabled, ntfy can perform voice calls via Twilio via the "X-Call" header.
 #

@@ -84,6 +84,22 @@ func TestServer_PublishWithFirebase(t *testing.T) {
 	require.Equal(t, "my first message", sender.Messages()[0].APNS.Payload.CustomData["message"])
 }
 
+func TestServer_PublishWithoutFirebase(t *testing.T) {
+	sender := newTestFirebaseSender(10)
+	s := newTestServer(t, newTestConfig(t))
+	s.firebaseClient = newFirebaseClient(sender, &testAuther{Allow: true})
+
+	response := request(t, s, "PUT", "/mytopic", "my first message", map[string]string{
+		"firebase": "no",
+	})
+	msg1 := toMessage(t, response.Body.String())
+	require.NotEmpty(t, msg1.ID)
+	require.Equal(t, "my first message", msg1.Message)
+
+	time.Sleep(100 * time.Millisecond) // Firebase publishing happens
+	require.Equal(t, 0, len(sender.Messages()))
+}
+
 func TestServer_PublishWithFirebase_WithoutUsers_AndWithoutPanic(t *testing.T) {
 	// This tests issue #641, which used to panic before the fix
 
@@ -411,7 +427,7 @@ func TestServer_PublishAt_FromUser(t *testing.T) {
 	t.Parallel()
 	s := newTestServer(t, newTestConfigWithAuthFile(t))
 
-	require.Nil(t, s.userManager.AddUser("phil", "phil", user.RoleAdmin))
+	require.Nil(t, s.userManager.AddUser("phil", "phil", user.RoleAdmin, false))
 	response := request(t, s, "PUT", "/mytopic", "a message", map[string]string{
 		"Authorization": util.BasicAuth("phil", "phil"),
 		"In":            "1h",
@@ -786,7 +802,7 @@ func TestServer_Auth_Success_Admin(t *testing.T) {
 	c := newTestConfigWithAuthFile(t)
 	s := newTestServer(t, c)
 
-	require.Nil(t, s.userManager.AddUser("phil", "phil", user.RoleAdmin))
+	require.Nil(t, s.userManager.AddUser("phil", "phil", user.RoleAdmin, false))
 
 	response := request(t, s, "GET", "/mytopic/auth", "", map[string]string{
 		"Authorization": util.BasicAuth("phil", "phil"),
@@ -800,7 +816,7 @@ func TestServer_Auth_Success_User(t *testing.T) {
 	c.AuthDefault = user.PermissionDenyAll
 	s := newTestServer(t, c)
 
-	require.Nil(t, s.userManager.AddUser("ben", "ben", user.RoleUser))
+	require.Nil(t, s.userManager.AddUser("ben", "ben", user.RoleUser, false))
 	require.Nil(t, s.userManager.AllowAccess("ben", "mytopic", user.PermissionReadWrite))
 
 	response := request(t, s, "GET", "/mytopic/auth", "", map[string]string{
@@ -814,7 +830,7 @@ func TestServer_Auth_Success_User_MultipleTopics(t *testing.T) {
 	c.AuthDefault = user.PermissionDenyAll
 	s := newTestServer(t, c)
 
-	require.Nil(t, s.userManager.AddUser("ben", "ben", user.RoleUser))
+	require.Nil(t, s.userManager.AddUser("ben", "ben", user.RoleUser, false))
 	require.Nil(t, s.userManager.AllowAccess("ben", "mytopic", user.PermissionReadWrite))
 	require.Nil(t, s.userManager.AllowAccess("ben", "anothertopic", user.PermissionReadWrite))
 
@@ -835,7 +851,7 @@ func TestServer_Auth_Fail_InvalidPass(t *testing.T) {
 	c.AuthDefault = user.PermissionDenyAll
 	s := newTestServer(t, c)
 
-	require.Nil(t, s.userManager.AddUser("phil", "phil", user.RoleAdmin))
+	require.Nil(t, s.userManager.AddUser("phil", "phil", user.RoleAdmin, false))
 
 	response := request(t, s, "GET", "/mytopic/auth", "", map[string]string{
 		"Authorization": util.BasicAuth("phil", "INVALID"),
@@ -848,7 +864,7 @@ func TestServer_Auth_Fail_Unauthorized(t *testing.T) {
 	c.AuthDefault = user.PermissionDenyAll
 	s := newTestServer(t, c)
 
-	require.Nil(t, s.userManager.AddUser("ben", "ben", user.RoleUser))
+	require.Nil(t, s.userManager.AddUser("ben", "ben", user.RoleUser, false))
 	require.Nil(t, s.userManager.AllowAccess("ben", "sometopic", user.PermissionReadWrite)) // Not mytopic!
 
 	response := request(t, s, "GET", "/mytopic/auth", "", map[string]string{
@@ -862,7 +878,7 @@ func TestServer_Auth_Fail_CannotPublish(t *testing.T) {
 	c.AuthDefault = user.PermissionReadWrite // Open by default
 	s := newTestServer(t, c)
 
-	require.Nil(t, s.userManager.AddUser("phil", "phil", user.RoleAdmin))
+	require.Nil(t, s.userManager.AddUser("phil", "phil", user.RoleAdmin, false))
 	require.Nil(t, s.userManager.AllowAccess(user.Everyone, "private", user.PermissionDenyAll))
 	require.Nil(t, s.userManager.AllowAccess(user.Everyone, "announcements", user.PermissionRead))
 
@@ -911,7 +927,7 @@ func TestServer_Auth_ViaQuery(t *testing.T) {
 	c.AuthDefault = user.PermissionDenyAll
 	s := newTestServer(t, c)
 
-	require.Nil(t, s.userManager.AddUser("ben", "some pass", user.RoleAdmin))
+	require.Nil(t, s.userManager.AddUser("ben", "some pass", user.RoleAdmin, false))
 
 	u := fmt.Sprintf("/mytopic/json?poll=1&auth=%s", base64.RawURLEncoding.EncodeToString([]byte(util.BasicAuth("ben", "some pass"))))
 	response := request(t, s, "GET", u, "", nil)
@@ -959,8 +975,8 @@ func TestServer_StatsResetter(t *testing.T) {
 		MessageLimit:          5,
 		MessageExpiryDuration: -5 * time.Second, // Second, what a hack!
 	}))
-	require.Nil(t, s.userManager.AddUser("phil", "phil", user.RoleUser))
-	require.Nil(t, s.userManager.AddUser("tieruser", "tieruser", user.RoleUser))
+	require.Nil(t, s.userManager.AddUser("phil", "phil", user.RoleUser, false))
+	require.Nil(t, s.userManager.AddUser("tieruser", "tieruser", user.RoleUser, false))
 	require.Nil(t, s.userManager.ChangeTier("tieruser", "test"))
 
 	// Send an anonymous message
@@ -1104,7 +1120,7 @@ func TestServer_DailyMessageQuotaFromDatabase(t *testing.T) {
 	require.Nil(t, s.userManager.AddTier(&user.Tier{
 		Code: "test",
 	}))
-	require.Nil(t, s.userManager.AddUser("phil", "phil", user.RoleUser))
+	require.Nil(t, s.userManager.AddUser("phil", "phil", user.RoleUser, false))
 	require.Nil(t, s.userManager.ChangeTier("phil", "test"))
 
 	u, err := s.userManager.User("phil")
@@ -1684,6 +1700,35 @@ func TestServer_PublishAsJSON_WithActions(t *testing.T) {
 	require.Equal(t, "target_temp_f=65", m.Actions[1].Body)
 }
 
+func TestServer_PublishAsJSON_NoCache(t *testing.T) {
+	s := newTestServer(t, newTestConfig(t))
+	body := `{"topic":"mytopic","message": "this message is not cached","cache":"no"}`
+	response := request(t, s, "PUT", "/", body, nil)
+	msg := toMessage(t, response.Body.String())
+	require.NotEmpty(t, msg.ID)
+	require.Equal(t, "this message is not cached", msg.Message)
+	require.Equal(t, int64(0), msg.Expires)
+
+	response = request(t, s, "GET", "/mytopic/json?poll=1", "", nil)
+	messages := toMessages(t, response.Body.String())
+	require.Empty(t, messages)
+}
+
+func TestServer_PublishAsJSON_WithoutFirebase(t *testing.T) {
+	sender := newTestFirebaseSender(10)
+	s := newTestServer(t, newTestConfig(t))
+	s.firebaseClient = newFirebaseClient(sender, &testAuther{Allow: true})
+
+	body := `{"topic":"mytopic","message": "my first message","firebase":"no"}`
+	response := request(t, s, "PUT", "/", body, nil)
+	msg1 := toMessage(t, response.Body.String())
+	require.NotEmpty(t, msg1.ID)
+	require.Equal(t, "my first message", msg1.Message)
+
+	time.Sleep(100 * time.Millisecond) // Firebase publishing happens
+	require.Equal(t, 0, len(sender.Messages()))
+}
+
 func TestServer_PublishAsJSON_Invalid(t *testing.T) {
 	s := newTestServer(t, newTestConfig(t))
 	body := `{"topic":"mytopic",INVALID`
@@ -1701,7 +1746,7 @@ func TestServer_PublishWithTierBasedMessageLimitAndExpiry(t *testing.T) {
 		MessageLimit:          5,
 		MessageExpiryDuration: -5 * time.Second, // Second, what a hack!
 	}))
-	require.Nil(t, s.userManager.AddUser("phil", "phil", user.RoleUser))
+	require.Nil(t, s.userManager.AddUser("phil", "phil", user.RoleUser, false))
 	require.Nil(t, s.userManager.ChangeTier("phil", "test"))
 
 	// Publish to reach message limit
@@ -1937,7 +1982,7 @@ func TestServer_PublishAttachmentWithTierBasedExpiry(t *testing.T) {
 		AttachmentExpiryDuration: sevenDays, // 7 days
 		AttachmentBandwidthLimit: 100000,
 	}))
-	require.Nil(t, s.userManager.AddUser("phil", "phil", user.RoleUser))
+	require.Nil(t, s.userManager.AddUser("phil", "phil", user.RoleUser, false))
 	require.Nil(t, s.userManager.ChangeTier("phil", "test"))
 
 	// Publish and make sure we can retrieve it
@@ -1982,7 +2027,7 @@ func TestServer_PublishAttachmentWithTierBasedBandwidthLimit(t *testing.T) {
 		AttachmentExpiryDuration: time.Hour,
 		AttachmentBandwidthLimit: 14000, // < 3x5000 bytes -> enough for one upload, one download
 	}))
-	require.Nil(t, s.userManager.AddUser("phil", "phil", user.RoleUser))
+	require.Nil(t, s.userManager.AddUser("phil", "phil", user.RoleUser, false))
 	require.Nil(t, s.userManager.ChangeTier("phil", "test"))
 
 	// Publish and make sure we can retrieve it
@@ -2020,7 +2065,7 @@ func TestServer_PublishAttachmentWithTierBasedLimits(t *testing.T) {
 		AttachmentExpiryDuration: 30 * time.Second,
 		AttachmentBandwidthLimit: 1000000,
 	}))
-	require.Nil(t, s.userManager.AddUser("phil", "phil", user.RoleUser))
+	require.Nil(t, s.userManager.AddUser("phil", "phil", user.RoleUser, false))
 	require.Nil(t, s.userManager.ChangeTier("phil", "test"))
 
 	// Publish small file as anonymous
@@ -2155,7 +2200,7 @@ func TestServer_Visitor_XForwardedFor_None(t *testing.T) {
 	c.BehindProxy = true
 	s := newTestServer(t, c)
 	r, _ := http.NewRequest("GET", "/bla", nil)
-	r.RemoteAddr = "8.9.10.11"
+	r.RemoteAddr = "8.9.10.11:1234"
 	r.Header.Set("X-Forwarded-For", "  ") // Spaces, not empty!
 	v, err := s.maybeAuthenticate(r)
 	require.Nil(t, err)
@@ -2167,7 +2212,7 @@ func TestServer_Visitor_XForwardedFor_Single(t *testing.T) {
 	c.BehindProxy = true
 	s := newTestServer(t, c)
 	r, _ := http.NewRequest("GET", "/bla", nil)
-	r.RemoteAddr = "8.9.10.11"
+	r.RemoteAddr = "8.9.10.11:1234"
 	r.Header.Set("X-Forwarded-For", "1.1.1.1")
 	v, err := s.maybeAuthenticate(r)
 	require.Nil(t, err)
@@ -2179,11 +2224,38 @@ func TestServer_Visitor_XForwardedFor_Multiple(t *testing.T) {
 	c.BehindProxy = true
 	s := newTestServer(t, c)
 	r, _ := http.NewRequest("GET", "/bla", nil)
-	r.RemoteAddr = "8.9.10.11"
+	r.RemoteAddr = "8.9.10.11:1234"
 	r.Header.Set("X-Forwarded-For", "1.2.3.4 , 2.4.4.2,234.5.2.1 ")
 	v, err := s.maybeAuthenticate(r)
 	require.Nil(t, err)
 	require.Equal(t, "234.5.2.1", v.ip.String())
+}
+
+func TestServer_Visitor_Custom_ClientIP_Header(t *testing.T) {
+	c := newTestConfig(t)
+	c.BehindProxy = true
+	c.ProxyForwardedHeader = "X-Client-IP"
+	s := newTestServer(t, c)
+	r, _ := http.NewRequest("GET", "/bla", nil)
+	r.RemoteAddr = "8.9.10.11:1234"
+	r.Header.Set("X-Client-IP", "1.2.3.4")
+	v, err := s.maybeAuthenticate(r)
+	require.Nil(t, err)
+	require.Equal(t, "1.2.3.4", v.ip.String())
+}
+
+func TestServer_Visitor_Custom_Forwarded_Header(t *testing.T) {
+	c := newTestConfig(t)
+	c.BehindProxy = true
+	c.ProxyForwardedHeader = "Forwarded"
+	c.ProxyTrustedAddresses = []string{"1.2.3.4"}
+	s := newTestServer(t, c)
+	r, _ := http.NewRequest("GET", "/bla", nil)
+	r.RemoteAddr = "8.9.10.11:1234"
+	r.Header.Set("Forwarded", " for=5.6.7.8, by=example.com;for=1.2.3.4")
+	v, err := s.maybeAuthenticate(r)
+	require.Nil(t, err)
+	require.Equal(t, "5.6.7.8", v.ip.String())
 }
 
 func TestServer_PublishWhileUpdatingStatsWithLotsOfMessages(t *testing.T) {
@@ -2242,7 +2314,7 @@ func TestServer_AnonymousUser_And_NonTierUser_Are_Same_Visitor(t *testing.T) {
 	defer s.closeDatabases()
 
 	// Create user without tier
-	require.Nil(t, s.userManager.AddUser("phil", "phil", user.RoleUser))
+	require.Nil(t, s.userManager.AddUser("phil", "phil", user.RoleUser, false))
 
 	// Publish a message (anonymous user)
 	rr := request(t, s, "POST", "/mytopic", "hi", nil)
@@ -2275,7 +2347,7 @@ func TestServer_SubscriberRateLimiting_Success(t *testing.T) {
 
 	// "Register" visitor 1.2.3.4 to topic "upAAAAAAAAAAAA" as a rate limit visitor
 	subscriber1Fn := func(r *http.Request) {
-		r.RemoteAddr = "1.2.3.4"
+		r.RemoteAddr = "1.2.3.4:1234"
 	}
 	rr := request(t, s, "GET", "/upAAAAAAAAAAAA/json?poll=1", "", nil, subscriber1Fn)
 	require.Equal(t, 200, rr.Code)
@@ -2284,7 +2356,7 @@ func TestServer_SubscriberRateLimiting_Success(t *testing.T) {
 
 	// "Register" visitor 8.7.7.1 to topic "up012345678912" as a rate limit visitor (implicitly via topic name)
 	subscriber2Fn := func(r *http.Request) {
-		r.RemoteAddr = "8.7.7.1"
+		r.RemoteAddr = "8.7.7.1:1234"
 	}
 	rr = request(t, s, "GET", "/up012345678912/json?poll=1", "", nil, subscriber2Fn)
 	require.Equal(t, 200, rr.Code)
@@ -2327,7 +2399,7 @@ func TestServer_SubscriberRateLimiting_NotWrongTopic(t *testing.T) {
 	s := newTestServer(t, c)
 
 	subscriberFn := func(r *http.Request) {
-		r.RemoteAddr = "1.2.3.4"
+		r.RemoteAddr = "1.2.3.4:1234"
 	}
 	rr := request(t, s, "GET", "/alerts,upAAAAAAAAAAAA,upBBBBBBBBBBBB/json?poll=1", "", nil, subscriberFn)
 	require.Equal(t, 200, rr.Code)
@@ -2347,7 +2419,7 @@ func TestServer_SubscriberRateLimiting_NotEnabled_Failed(t *testing.T) {
 
 	// Registering visitor 1.2.3.4 to topic has no effect
 	rr := request(t, s, "GET", "/upAAAAAAAAAAAA/json?poll=1", "", nil, func(r *http.Request) {
-		r.RemoteAddr = "1.2.3.4"
+		r.RemoteAddr = "1.2.3.4:1234"
 	})
 	require.Equal(t, 200, rr.Code)
 	require.Equal(t, "", rr.Body.String())
@@ -2355,7 +2427,7 @@ func TestServer_SubscriberRateLimiting_NotEnabled_Failed(t *testing.T) {
 
 	// Registering visitor 8.7.7.1 to topic has no effect
 	rr = request(t, s, "GET", "/up012345678912/json?poll=1", "", nil, func(r *http.Request) {
-		r.RemoteAddr = "8.7.7.1"
+		r.RemoteAddr = "8.7.7.1:1234"
 	})
 	require.Equal(t, 200, rr.Code)
 	require.Equal(t, "", rr.Body.String())
@@ -2381,7 +2453,7 @@ func TestServer_SubscriberRateLimiting_UP_Only(t *testing.T) {
 	// "Register" 5 different UnifiedPush visitors
 	for i := 0; i < 5; i++ {
 		subscriberFn := func(r *http.Request) {
-			r.RemoteAddr = fmt.Sprintf("1.2.3.%d", i+1)
+			r.RemoteAddr = fmt.Sprintf("1.2.3.%d:1234", i+1)
 		}
 		rr := request(t, s, "GET", fmt.Sprintf("/up12345678901%d/json?poll=1", i), "", nil, subscriberFn)
 		require.Equal(t, 200, rr.Code)
@@ -2405,7 +2477,7 @@ func TestServer_Matrix_SubscriberRateLimiting_UP_Only(t *testing.T) {
 	// "Register" 5 different UnifiedPush visitors
 	for i := 0; i < 5; i++ {
 		rr := request(t, s, "GET", fmt.Sprintf("/up12345678901%d/json?poll=1", i), "", nil, func(r *http.Request) {
-			r.RemoteAddr = fmt.Sprintf("1.2.3.%d", i+1)
+			r.RemoteAddr = fmt.Sprintf("1.2.3.%d:1234", i+1)
 		})
 		require.Equal(t, 200, rr.Code)
 	}
@@ -2432,7 +2504,7 @@ func TestServer_SubscriberRateLimiting_VisitorExpiration(t *testing.T) {
 
 	// "Register" rate visitor
 	subscriberFn := func(r *http.Request) {
-		r.RemoteAddr = "1.2.3.4"
+		r.RemoteAddr = "1.2.3.4:1234"
 	}
 	rr := request(t, s, "GET", "/upAAAAAAAAAAAA/json?poll=1", "", nil, subscriberFn)
 	require.Equal(t, 200, rr.Code)
@@ -2471,7 +2543,7 @@ func TestServer_SubscriberRateLimiting_ProtectedTopics_WithDefaultReadWrite(t *t
 	// - "up123456789012": Allowed, because no ACLs and nobody owns the topic
 	// - "announcements": NOT allowed, because it has read-only permissions for everyone
 	rr := request(t, s, "GET", "/up123456789012,announcements/json?poll=1", "", nil, func(r *http.Request) {
-		r.RemoteAddr = "1.2.3.4"
+		r.RemoteAddr = "1.2.3.4:1234"
 	})
 	require.Equal(t, 200, rr.Code)
 	require.Equal(t, "1.2.3.4", s.topics["up123456789012"].rateVisitor.ip.String())
@@ -2913,7 +2985,7 @@ func request(t *testing.T, s *Server, method, url, body string, headers map[stri
 	if err != nil {
 		t.Fatal(err)
 	}
-	r.RemoteAddr = "9.9.9.9" // Used for tests
+	r.RemoteAddr = "9.9.9.9:1234" // Used for tests
 	for k, v := range headers {
 		r.Header.Set(k, v)
 	}

@@ -446,8 +446,10 @@ func (s *Server) handleInternal(w http.ResponseWriter, r *http.Request, v *visit
 		return s.ensureWebPushEnabled(s.handleWebManifest)(w, r, v)
 	} else if r.Method == http.MethodGet && r.URL.Path == apiUsersPath {
 		return s.ensureAdmin(s.handleUsersGet)(w, r, v)
-	} else if r.Method == http.MethodPut && r.URL.Path == apiUsersPath {
+	} else if r.Method == http.MethodPost && r.URL.Path == apiUsersPath {
 		return s.ensureAdmin(s.handleUsersAdd)(w, r, v)
+	} else if r.Method == http.MethodPut && r.URL.Path == apiUsersPath {
+		return s.ensureAdmin(s.handleUsersUpdate)(w, r, v)
 	} else if r.Method == http.MethodDelete && r.URL.Path == apiUsersPath {
 		return s.ensureAdmin(s.handleUsersDelete)(w, r, v)
 	} else if (r.Method == http.MethodPut || r.Method == http.MethodPost) && r.URL.Path == apiUsersAccessPath {
@@ -1866,6 +1868,12 @@ func (s *Server) transformBodyJSON(next handleFunc) handleFunc {
 		if m.Call != "" {
 			r.Header.Set("X-Call", m.Call)
 		}
+		if m.Cache != "" {
+			r.Header.Set("X-Cache", m.Cache)
+		}
+		if m.Firebase != "" {
+			r.Header.Set("X-Firebase", m.Firebase)
+		}
 		return next(w, r, v)
 	}
 }
@@ -1928,8 +1936,8 @@ func (s *Server) authorizeTopic(next handleFunc, perm user.Permission) handleFun
 // This function will ALWAYS return a visitor, even if an error occurs (e.g. unauthorized), so
 // that subsequent logging calls still have a visitor context.
 func (s *Server) maybeAuthenticate(r *http.Request) (*visitor, error) {
-	// Read "Authorization" header value, and exit out early if it's not set
-	ip := extractIPAddress(r, s.config.BehindProxy)
+	// Read the "Authorization" header value and exit out early if it's not set
+	ip := extractIPAddress(r, s.config.BehindProxy, s.config.ProxyForwardedHeader, s.config.ProxyTrustedAddresses)
 	vip := s.visitor(ip, nil)
 	if s.userManager == nil {
 		return vip, nil
@@ -2004,7 +2012,7 @@ func (s *Server) authenticateBearerAuth(r *http.Request, token string) (*user.Us
 	if err != nil {
 		return nil, err
 	}
-	ip := extractIPAddress(r, s.config.BehindProxy)
+	ip := extractIPAddress(r, s.config.BehindProxy, s.config.ProxyForwardedHeader, s.config.ProxyTrustedAddresses)
 	go s.userManager.EnqueueTokenUpdate(token, &user.TokenUpdate{
 		LastAccess: time.Now(),
 		LastOrigin: ip,
